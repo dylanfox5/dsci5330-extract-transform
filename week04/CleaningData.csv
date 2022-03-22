@@ -1,0 +1,11 @@
+ID Letter,ID Number,Length,Location
+A,10,2 1/2,Top
+B,3,4,Middle
+C,12,3 1/2,Middle
+D,21,2 1/4,Middle
+E,19,3    ,Bottom
+A,12,6    ,top
+B,22,2    ,Top
+C,18,1    ,Bottom
+E,7,1 1/4,Bottom
+D,5,2    ,bottom

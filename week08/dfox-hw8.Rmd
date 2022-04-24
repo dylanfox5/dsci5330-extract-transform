@@ -1,0 +1,99 @@
+---
+title: "dfox-hw8"
+author: "dfox"
+date: "4/24/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(lubridate)
+library(tidyverse)
+library(xlsx)
+library(naniar)
+
+states <- read_csv("/Users/dylanfox/OneDrive - Graceland University/Graduate Work/dsci5330-extract_transform/week08/states.csv")
+statehood <- read.xlsx("/Users/dylanfox/OneDrive - Graceland University/Graduate Work/dsci5330-extract_transform/week08/statehood.xlsx", 1, header=FALSE)
+region <- read_csv("/Users/dylanfox/OneDrive - Graceland University/Graduate Work/dsci5330-extract_transform/week08/stateregion.csv")
+data <- read_csv("/Users/dylanfox/OneDrive - Graceland University/Graduate Work/dsci5330-extract_transform/week08/statedata.csv")
+```
+
+## State Data
+
+The first step in creating our state data includes taking a look at how the files are formatted.
+
+```{r}
+head(states)
+```
+
+## Joining Data
+
+From here, we can start to slowly join our data together into a new dataframe. As we add more data to our final result, we need to format the data in a clean way.
+
+The first data we will join together is the state name, abbreviation, and the region. The file containing regional data must be pivoted before joining together. After that, we can left join the data together based on a column key, state abbreviation in this case.
+
+```{r}
+df <- states %>%
+  select(state.name, state.abb)
+
+region <- pivot_longer(region, -X1, names_to="state.abb", values_to="state.region") %>%
+  select(state.abb, state.region)
+
+df <- left_join(df, region, by = "state.abb")
+```
+
+Next, we can easily left join the general state data since it is already formatted cleanly. We'll also rename our column names in a friendlier fashion and take a look at our new dataframe so far.
+
+```{r}
+df <- left_join(df, data, by = "state.name")
+
+df <- df %>%
+  rename(state = state.name, abbr = state.abb, region = state.region, pop = Population, income = Income, 
+         illiteracy = Illiteracy, life_exp = `Life Exp`, murder = Murder, hs_grad = `HS Grad`, frost = Frost, area = Area)
+
+head(df)
+```
+
+Finally, we need to join the statehood data. This data must first be altered slightly. We need to edit the date of when each state became a state; when importing the data, each date was defaulted to 2021. To fix this, we can take the column that defines the year of statehood and replace 2021 with that value for each state. From there, we can complete a left join by using the state column.
+
+```{r}
+year(statehood$X3) <- statehood$X4
+statehood <- statehood %>%
+  select(X2, X3) %>%
+  rename(state = X2, statehood = X3)
+
+df <- left_join(df, statehood, by = "state")
+```
+
+## Imputing Data
+Now that all our data has been joined and formatted, we need to account for the NAs in our data. Let's take a look at the frequency of NAs.
+
+
+```{r}
+gg_miss_var(df)
+```
+
+We see that three column are missing data. Since the income column is only missing three values, we'll go ahead and take the mean of that column and replace the NAs with the mean. For murder and illiteracy, we'll complete a linear regression model to impute those values.
+
+```{r}
+# replace income with mean
+df$income[is.na(df$income)] <- mean(df$income, na.rm=TRUE)
+
+# replace illiteracy & murder using lm
+lm_murder <- lm(murder ~ income + hs_grad, data=df)
+murder <- df %>% filter(is.na(df$murder))
+df$murder[is.na(df$murder)] <- predict(lm_murder, murder)
+
+lm_ill <- lm(illiteracy ~ hs_grad + murder, data=df)
+ill <- df %>% filter(is.na(df$illiteracy))
+df$illiteracy[is.na(df$illiteracy)] <- predict(lm_ill, ill)
+
+df$time_since_statehood <- as.duration(today()-df$statehood)
+```
+
+## Final Data Set
+Finally, let's take a look at our finished data set.
+```{r}
+df
+```
